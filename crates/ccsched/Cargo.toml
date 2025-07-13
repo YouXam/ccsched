@@ -1,0 +1,29 @@
+[package]
+name = "ccsched"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "ccsched"
+path = "src/main.rs"
+
+[dependencies]
+ccsched-core = { path = "../ccsched-core" }
+tokio.workspace = true
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-appender.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+axum.workspace = true
+reqwest.workspace = true
+anyhow.workspace = true
+dotenvy.workspace = true
+tempfile = "3.20"
+is-terminal = "0.4"
+chrono.workspace = true
+edit = "0.1"
