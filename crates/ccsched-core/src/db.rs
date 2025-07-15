@@ -50,6 +50,7 @@ impl Database {
                 submitted_at DATETIME NOT NULL DEFAULT (datetime('now', 'utc')),
                 finished_at DATETIME,
                 output TEXT,
+                result TEXT,
                 resume_at DATETIME
             )
             "#,
@@ -90,6 +91,9 @@ impl Database {
 
         // Migration: Add resume_at column if it doesn't exist
         let _ = conn.execute("ALTER TABLE tasks ADD COLUMN resume_at DATETIME", []);
+        
+        // Migration: Add result column if it doesn't exist
+        let _ = conn.execute("ALTER TABLE tasks ADD COLUMN result TEXT", []);
 
         Ok(())
     }
@@ -129,7 +133,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         
         let row = conn.query_row(
-            "SELECT id, name, prompt, cwd, status, session_id, submitted_at, finished_at, output, resume_at FROM tasks WHERE id = ?",
+            "SELECT id, name, prompt, cwd, status, session_id, submitted_at, finished_at, output, result, resume_at FROM tasks WHERE id = ?",
             params![id],
             |row| {
                 Ok(Task {
@@ -142,6 +146,7 @@ impl Database {
                     submitted_at: row.get("submitted_at")?,
                     finished_at: row.get("finished_at")?,
                     output: row.get("output")?,
+                    result: row.get("result")?,
                     resume_at: row.get("resume_at")?,
                 })
             },
@@ -155,7 +160,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         
         let row = conn.query_row(
-            "SELECT id, name, prompt, cwd, status, session_id, submitted_at, finished_at, output, resume_at FROM tasks WHERE session_id = ?",
+            "SELECT id, name, prompt, cwd, status, session_id, submitted_at, finished_at, output, result, resume_at FROM tasks WHERE session_id = ?",
             params![session_id],
             |row| {
                 Ok(Task {
@@ -168,6 +173,7 @@ impl Database {
                     submitted_at: row.get("submitted_at")?,
                     finished_at: row.get("finished_at")?,
                     output: row.get("output")?,
+                    result: row.get("result")?,
                     resume_at: row.get("resume_at")?,
                 })
             },
@@ -181,7 +187,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         
         let mut stmt = conn.prepare(
-            "SELECT id, name, prompt, cwd, status, session_id, submitted_at, finished_at, output, resume_at FROM tasks ORDER BY submitted_at DESC"
+            "SELECT id, name, prompt, cwd, status, session_id, submitted_at, finished_at, output, result, resume_at FROM tasks ORDER BY submitted_at ASC"
         )?;
 
         let rows = stmt.query_map([], |row| {
@@ -195,6 +201,7 @@ impl Database {
                 submitted_at: row.get("submitted_at")?,
                 finished_at: row.get("finished_at")?,
                 output: row.get("output")?,
+                result: row.get("result")?,
                 resume_at: row.get("resume_at")?,
             })
         })?;
@@ -244,36 +251,73 @@ impl Database {
         Ok(())
     }
 
+    pub async fn update_task_result(&self, id: i64, result: Option<&str>) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let updated = conn.execute(
+            "UPDATE tasks SET result = ? WHERE id = ?",
+            params![result, id],
+        )?;
+        
+        if updated == 0 {
+            return Err(CcschedError::Config(format!("Task not found: {id}")));
+        }
+        
+        Ok(())
+    }
+
+    pub async fn update_task_output_and_result(&self, id: i64, output: Option<&str>, result: Option<&str>) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let updated = conn.execute(
+            "UPDATE tasks SET output = ?, result = ? WHERE id = ?",
+            params![output, result, id],
+        )?;
+        
+        if updated == 0 {
+            return Err(CcschedError::Config(format!("Task not found: {id}")));
+        }
+        
+        Ok(())
+    }
+
     pub async fn get_and_claim_next_task(&self) -> Result<Option<Task>> {
         let conn = self.conn.lock().unwrap();
         let tx = conn.unchecked_transaction()?;
         
-        // First check if there's already a running task
+        // First check if there's already a running task that's not in waiting state
+        // We allow waiting tasks to be resumed even if there are other running tasks
         let running_count: i64 = tx.query_row(
             "SELECT COUNT(*) FROM tasks WHERE status = 'running'",
             [],
             |row| row.get(0)
         )?;
         
-        // If there's already a running task, don't schedule any more
-        if running_count > 0 {
-            tx.commit()?;
-            return Ok(None);
-        }
+        // If there's already a running task, only allow waiting tasks to be resumed
+        let allow_only_waiting = running_count > 0;
         
         // Find the next ready task and claim it atomically
-        let task_opt = tx.query_row(
+        let status_condition = if allow_only_waiting {
+            "(t.status = 'waiting' AND (t.resume_at IS NULL OR t.resume_at <= datetime('now', 'utc')))"
+        } else {
+            "(t.status = 'pending' OR (t.status = 'waiting' AND (t.resume_at IS NULL OR t.resume_at <= datetime('now', 'utc'))))"
+        };
+        
+        let query = format!(
             r#"
-            SELECT DISTINCT t.id, t.name, t.prompt, t.cwd, t.status, t.session_id, t.submitted_at, t.finished_at, t.output, t.resume_at
+            SELECT DISTINCT t.id, t.name, t.prompt, t.cwd, t.status, t.session_id, t.submitted_at, t.finished_at, t.output, t.result, t.resume_at
             FROM tasks t
             LEFT JOIN task_dependencies td ON t.id = td.task_id
             LEFT JOIN tasks dep ON td.depends_on_id = dep.id
-            WHERE (t.status = 'pending' OR (t.status = 'waiting' AND (t.resume_at IS NULL OR t.resume_at <= datetime('now', 'utc'))))
-            GROUP BY t.id, t.name, t.prompt, t.cwd, t.status, t.session_id, t.submitted_at, t.finished_at, t.output, t.resume_at
+            WHERE {}
+            GROUP BY t.id, t.name, t.prompt, t.cwd, t.status, t.session_id, t.submitted_at, t.finished_at, t.output, t.result, t.resume_at
             HAVING COUNT(CASE WHEN dep.status IS NOT NULL AND dep.status != 'done' THEN 1 END) = 0
             ORDER BY t.submitted_at ASC
             LIMIT 1
             "#,
+            status_condition
+        );
+        
+        let task_opt = tx.query_row(
+            &query,
             [],
             |row| {
                 Ok(Task {
@@ -286,6 +330,7 @@ impl Database {
                     submitted_at: row.get("submitted_at")?,
                     finished_at: row.get("finished_at")?,
                     output: row.get("output")?,
+                    result: row.get("result")?,
                     resume_at: row.get("resume_at")?,
                 })
             }
@@ -447,7 +492,7 @@ impl Database {
     pub async fn update_task_prompt_and_reset_status(&self, id: i64, prompt: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let updated = conn.execute(
-            "UPDATE tasks SET prompt = ?, status = 'pending', finished_at = NULL, output = NULL, resume_at = NULL WHERE id = ?", 
+            "UPDATE tasks SET prompt = ?, status = 'pending', finished_at = NULL, output = NULL, result = NULL, resume_at = NULL WHERE id = ?", 
             params![prompt, id]
         )?;
         
@@ -463,7 +508,7 @@ impl Database {
         let status_str = status.to_string();
         
         let mut stmt = conn.prepare(
-            "SELECT id, name, prompt, cwd, status, session_id, submitted_at, finished_at, output, resume_at FROM tasks WHERE status = ? ORDER BY submitted_at ASC"
+            "SELECT id, name, prompt, cwd, status, session_id, submitted_at, finished_at, output, result, resume_at FROM tasks WHERE status = ? ORDER BY submitted_at ASC"
         )?;
 
         let rows = stmt.query_map([status_str], |row| {
@@ -477,6 +522,7 @@ impl Database {
                 submitted_at: row.get("submitted_at")?,
                 finished_at: row.get("finished_at")?,
                 output: row.get("output")?,
+                result: row.get("result")?,
                 resume_at: row.get("resume_at")?,
             })
         })?;
@@ -493,7 +539,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         
         let mut stmt = conn.prepare(
-            "SELECT id, name, prompt, cwd, status, session_id, submitted_at, finished_at, output, resume_at FROM tasks WHERE status = 'waiting' AND (resume_at IS NULL OR resume_at <= datetime('now', 'utc')) ORDER BY submitted_at ASC"
+            "SELECT id, name, prompt, cwd, status, session_id, submitted_at, finished_at, output, result, resume_at FROM tasks WHERE status = 'waiting' AND (resume_at IS NULL OR resume_at <= datetime('now', 'utc')) ORDER BY submitted_at ASC"
         )?;
 
         let rows = stmt.query_map([], |row| {
@@ -507,6 +553,7 @@ impl Database {
                 submitted_at: row.get("submitted_at")?,
                 finished_at: row.get("finished_at")?,
                 output: row.get("output")?,
+                result: row.get("result")?,
                 resume_at: row.get("resume_at")?,
             })
         })?;

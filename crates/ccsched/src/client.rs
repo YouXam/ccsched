@@ -8,6 +8,54 @@ use std::io::{self, Read};
 use std::process::Command;
 use tracing::{error, info};
 
+pub async fn add_task(args: AddArgs) -> Result<()> {
+    // Read the file content as prompt
+    let prompt = std::fs::read_to_string(&args.filename)
+        .map_err(|e| anyhow!("Failed to read file '{}': {}", args.filename, e))?;
+
+    if prompt.trim().is_empty() {
+        return Err(anyhow!("File '{}' is empty", args.filename));
+    }
+
+    let cwd = args.cwd.unwrap_or_else(|| {
+        env::current_dir()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string()
+    });
+
+    let depends_on = if let Some(deps) = &args.depends {
+        deps.split(',')
+            .map(|s| s.trim().parse::<i64>())
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| anyhow!("Invalid dependency ID: {}", e))?
+    } else {
+        Vec::new()
+    };
+
+    let request = CreateTaskRequest {
+        name: args.filename.clone(), // Use filename as task name
+        prompt,
+        cwd,
+        depends_on,
+    };
+
+    let client = reqwest::Client::new();
+    let url = format!("http://{}:{}/submit", args.host, args.port);
+
+    let response = client
+        .post(&url)
+        .json(&request)
+        .send()
+        .await?
+        .error_for_status()?;
+
+    let task_response: CreateTaskResponse = response.json().await?;
+
+    println!("Task submitted successfully. Task ID: {}", task_response.task_id);
+    Ok(())
+}
+
 pub async fn submit_task(args: SubmitArgs) -> Result<()> {
     let prompt = if let Some(prompt_file) = &args.prompt_file {
         // Prompt file was explicitly provided
@@ -162,6 +210,12 @@ pub async fn show_task(args: ShowArgs) -> Result<()> {
     println!("\nPrompt:");
     println!("-------");
     println!("{}", task.prompt);
+    
+    if let Some(result) = &task.result {
+        println!("\nResult:");
+        println!("-------");
+        println!("{}", result);
+    }
 
     Ok(())
 }
@@ -189,11 +243,12 @@ pub async fn resume_task(args: ResumeArgs) -> Result<()> {
     let session_id = task_info.session_id
         .ok_or_else(|| anyhow!("Task has no session ID. Cannot resume."))?;
 
-    info!("Resuming task {} with session ID {}", task_info.id, session_id);
+    info!("Resuming task {} with session ID {} in directory {}", task_info.id, session_id, task_info.cwd);
 
     let mut cmd = Command::new("claude");
     cmd.arg("-r").arg(&session_id);
     cmd.args(&args.claude_args);
+    cmd.current_dir(&task_info.cwd);
 
     let status = cmd.status()?;
     

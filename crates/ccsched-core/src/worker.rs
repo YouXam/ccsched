@@ -141,6 +141,8 @@ impl Worker {
 
         let mut max_retries = 3;
         let mut current_session_id = session_id;
+        let mut previous_result: Option<String> = None;
+        
         loop {
             let verification_result = self
                 .run_claude_verification(&task, &current_session_id, &verification_prompt, &task_log_path, task_id)
@@ -199,49 +201,61 @@ impl Worker {
                 ));
             }
 
+            // Check if this is the final verification (contains SUCCESS or FAILED markers)
+            
             if verification_result
                 .output
                 .contains("CLAUDE_CODE_SCHEDULER_SUCCESS")
             {
                 info!("Task {} completed successfully", task_id);
-                self.db
-                    .update_task_status(
-                        task_id,
-                        TaskStatus::Done,
-                        Some(&current_session_id),
-                        Some(Utc::now().naive_utc()),
-                    )
-                    .await?;
+                
+                // Use the previous result (not the one containing SUCCESS marker)
+                self.store_task_completion(
+                    task_id,
+                    TaskStatus::Done,
+                    &current_session_id,
+                    &verification_result.output,
+                    previous_result.as_deref(),
+                ).await?;
+                
                 return Ok(());
             } else if verification_result
                 .output
                 .contains("CLAUDE_CODE_SCHEDULER_FAILED")
             {
                 info!("Task {} failed as reported by Claude", task_id);
-                self.db
-                    .update_task_status(
-                        task_id,
-                        TaskStatus::Failed,
-                        Some(&current_session_id),
-                        Some(Utc::now().naive_utc()),
-                    )
-                    .await?;
+                
+                // Use the previous result (not the one containing FAILED marker)
+                self.store_task_completion(
+                    task_id,
+                    TaskStatus::Failed,
+                    &current_session_id,
+                    &verification_result.output,
+                    previous_result.as_deref(),
+                ).await?;
+                
                 return Err(CcschedError::ClaudeExecution(
                     "Task failed as reported by Claude".to_string(),
                 ));
+            } else {
+                // This is not the final verification, save this result as the previous result
+                // Extract the actual work result from this verification run
+                previous_result = extract_work_result(&verification_result.output);
             }
 
             max_retries -= 1;
             if max_retries <= 0 {
                 warn!("Task {} exceeded maximum verification retries", task_id);
-                self.db
-                    .update_task_status(
-                        task_id,
-                        TaskStatus::Failed,
-                        Some(&current_session_id),
-                        Some(Utc::now().naive_utc()),
-                    )
-                    .await?;
+                
+                // Store the final output even when max retries exceeded
+                self.store_task_completion(
+                    task_id,
+                    TaskStatus::Failed,
+                    &current_session_id,
+                    &verification_result.output,
+                    None, // No clean result since verification failed
+                ).await?;
+                
                 return Err(CcschedError::ClaudeExecution(
                     "Exceeded maximum verification retries".to_string(),
                 ));
@@ -271,6 +285,30 @@ impl Worker {
     ) -> Result<ClaudeResult> {
         self.run_claude_command(task, prompt, Some(session_id), task_log_path, task_id)
             .await
+    }
+
+    async fn store_task_completion(
+        &self,
+        task_id: i64,
+        status: TaskStatus,
+        session_id: &str,
+        output: &str,
+        result: Option<&str>,
+    ) -> Result<()> {
+        // First update the task status and basic fields
+        self.db
+            .update_task_status(
+                task_id,
+                status,
+                Some(session_id),
+                Some(Utc::now().naive_utc()),
+            )
+            .await?;
+        
+        // Then update both output and result fields
+        self.db.update_task_output_and_result(task_id, Some(output), result).await?;
+        
+        Ok(())
     }
 
     async fn run_claude_command(
@@ -427,3 +465,50 @@ struct ClaudeResult {
     output: String,
     rate_limit_timestamp: Option<i64>,
 }
+
+fn extract_work_result(output: &str) -> Option<String> {
+    // Split by lines and work backwards to find the actual result
+    let lines: Vec<&str> = output.lines().collect();
+    
+    // Look for the last JSON line that contains actual result content
+    // Skip empty lines and system messages
+    for line in lines.iter().rev() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        
+        // Try to parse as JSON to see if it's a Claude output line
+        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(trimmed) {
+            // Check if this is a result line with actual content
+            if let Some(result_type) = json_value.get("type").and_then(|v| v.as_str()) {
+                if result_type == "result" {
+                    if let Some(result_content) = json_value.get("result").and_then(|v| v.as_str()) {
+                        let trimmed_content = result_content.trim();
+                        // Make sure it's not a success/failure marker
+                        if !trimmed_content.is_empty() 
+                            && !trimmed_content.contains("CLAUDE_CODE_SCHEDULER_SUCCESS")
+                            && !trimmed_content.contains("CLAUDE_CODE_SCHEDULER_FAILED") {
+                            return Some(trimmed_content.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Fallback: if no proper JSON result found, try to extract the last non-empty meaningful content
+    for line in lines.iter().rev() {
+        let trimmed = line.trim();
+        if !trimmed.is_empty() 
+            && !trimmed.starts_with("{") 
+            && !trimmed.contains("\"type\"")
+            && !trimmed.contains("CLAUDE_CODE_SCHEDULER_SUCCESS")
+            && !trimmed.contains("CLAUDE_CODE_SCHEDULER_FAILED") {
+            return Some(trimmed.to_string());
+        }
+    }
+    
+    None
+}
+

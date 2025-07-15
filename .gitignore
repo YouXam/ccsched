@@ -3,3 +3,4 @@ logs/
 db.sqlite
 .DS_Store
 target/
+server/

@@ -49,6 +49,7 @@ pub struct Task {
     pub submitted_at: NaiveDateTime,
     pub finished_at: Option<NaiveDateTime>,
     pub output: Option<String>,
+    pub result: Option<String>,
     pub resume_at: Option<NaiveDateTime>,
 }
 
@@ -81,6 +82,7 @@ pub struct TaskListResponse {
 pub struct TaskInfo {
     pub id: i64,
     pub name: String,
+    pub cwd: String,
     pub status: TaskStatus,
     pub session_id: Option<String>,
     pub submitted_at: NaiveDateTime,
@@ -93,10 +95,12 @@ pub struct TaskInfoWithPrompt {
     pub id: i64,
     pub name: String,
     pub prompt: String,
+    pub cwd: String,
     pub status: TaskStatus,
     pub session_id: Option<String>,
     pub submitted_at: NaiveDateTime,
     pub finished_at: Option<NaiveDateTime>,
+    pub result: Option<String>,
     pub resume_at: Option<NaiveDateTime>,
 }
 
@@ -105,6 +109,7 @@ impl From<Task> for TaskInfo {
         Self {
             id: task.id,
             name: task.name,
+            cwd: task.cwd,
             status: task.status,
             session_id: task.session_id,
             submitted_at: task.submitted_at,
@@ -120,10 +125,12 @@ impl From<Task> for TaskInfoWithPrompt {
             id: task.id,
             name: task.name,
             prompt: task.prompt,
+            cwd: task.cwd,
             status: task.status,
             session_id: task.session_id,
             submitted_at: task.submitted_at,
             finished_at: task.finished_at,
+            result: task.result,
             resume_at: task.resume_at,
         }
     }
