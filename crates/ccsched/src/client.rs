@@ -235,22 +235,23 @@ pub async fn resume_task(args: ResumeArgs) -> Result<()> {
     }
 
     let client = reqwest::Client::new();
+    let host = args.host.as_ref().unwrap_or(&"localhost".to_string());
+    let port = args.port.unwrap_or(39512);
+    
+    // Get server configuration to obtain claude_path
+    let config_url = format!("http://{}:{}/config", host, port);
+    let config_response = client.get(&config_url).send().await?.error_for_status()?;
+    let config: ConfigResponse = config_response.json().await?;
     
     let task_info = if args.task_or_session_id.parse::<i64>().is_ok() {
         // It's a valid number, treat as task ID
         let task_id: i64 = args.task_or_session_id.parse().unwrap();
-        let url = format!("http://{}:{}/task/{}", 
-                          args.host.as_ref().unwrap_or(&"localhost".to_string()), 
-                          args.port.unwrap_or(39512), 
-                          task_id);
+        let url = format!("http://{}:{}/task/{}", host, port, task_id);
         let response = client.get(&url).send().await?.error_for_status()?;
         response.json::<TaskInfo>().await?
     } else {
         // Not a number, treat as session ID
-        let url = format!("http://{}:{}/task/session/{}", 
-                          args.host.as_ref().unwrap_or(&"localhost".to_string()), 
-                          args.port.unwrap_or(39512), 
-                          args.task_or_session_id);
+        let url = format!("http://{}:{}/task/session/{}", host, port, args.task_or_session_id);
         let response = client.get(&url).send().await?.error_for_status()?;
         response.json::<TaskInfo>().await?
     };
@@ -260,7 +261,7 @@ pub async fn resume_task(args: ResumeArgs) -> Result<()> {
 
     info!("Resuming task {} with session ID {} in directory {}", task_info.id, session_id, task_info.cwd);
 
-    let mut cmd = Command::new("claude");
+    let mut cmd = Command::new(&config.claude_path);
     cmd.arg("-r").arg(&session_id);
     cmd.args(&args.claude_args);
     cmd.current_dir(&task_info.cwd);

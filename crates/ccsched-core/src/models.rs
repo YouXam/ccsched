@@ -104,6 +104,11 @@ pub struct TaskInfoWithPrompt {
     pub resume_at: Option<NaiveDateTime>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigResponse {
+    pub claude_path: String,
+}
+
 impl From<Task> for TaskInfo {
     fn from(task: Task) -> Self {
         Self {

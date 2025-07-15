@@ -19,6 +19,7 @@ use tracing::{error, info};
 #[derive(Clone)]
 pub struct ServerState {
     pub db: Arc<Database>,
+    pub config: Config,
 }
 
 pub async fn start_server(config: Config) -> anyhow::Result<()> {
@@ -27,11 +28,13 @@ pub async fn start_server(config: Config) -> anyhow::Result<()> {
     
     let state = ServerState {
         db: Arc::new(db),
+        config: config.clone(),
     };
 
     let app = Router::new()
         .route("/submit", post(submit_task))
         .route("/list", get(list_tasks))
+        .route("/config", get(get_config))
         .route("/task/:id", get(get_task_with_prompt))
         .route("/task/:id", delete(delete_task))
         .route("/task/:id/rename", put(rename_task))
@@ -165,6 +168,14 @@ async fn rename_task(
             Err((StatusCode::NOT_FOUND, format!("Failed to rename task: {e}")))
         }
     }
+}
+
+async fn get_config(
+    State(state): State<ServerState>,
+) -> Result<Json<ConfigResponse>, (StatusCode, String)> {
+    Ok(Json(ConfigResponse {
+        claude_path: state.config.claude_path.clone(),
+    }))
 }
 
 async fn edit_task(
