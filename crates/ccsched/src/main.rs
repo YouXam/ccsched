@@ -17,9 +17,9 @@ async fn main() -> anyhow::Result<()> {
             info!("Starting Claude Code Scheduler");
 
             let config = Config::with_overrides(
-                Some(args.host),
-                Some(args.port),
-                Some(args.claude_path),
+                args.host,
+                args.port,
+                args.claude_path,
                 args.env,
             )?;
 

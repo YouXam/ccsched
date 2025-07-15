@@ -41,19 +41,19 @@ pub enum Commands {
 
 #[derive(Parser)]
 pub struct StartArgs {
-    /// Host address to bind to
-    #[arg(short = 'H', long, default_value = "127.0.0.1")]
-    pub host: String,
+    /// Host address to bind to (default: "localhost")
+    #[arg(short = 'H', long)]
+    pub host: Option<String>,
 
-    /// Port to listen on
-    #[arg(short, long, default_value_t = 39512)]
-    pub port: u16,
+    /// Port to listen on (default: 39512)
+    #[arg(short, long)]
+    pub port: Option<u16>,
 
-    /// Path to Claude Code executable
-    #[arg(short, long, default_value = "claude")]
-    pub claude_path: String,
+    /// Path to Claude Code executable (default: "claude")
+    #[arg(short, long)]
+    pub claude_path: Option<String>,
 
-    /// Environment file to load
+    /// Environment file to load (default: ".env")
     #[arg(short, long)]
     pub env: Option<String>,
 }
@@ -75,12 +75,12 @@ pub struct SubmitArgs {
     pub depends: Option<String>,
 
     /// Scheduler host
-    #[arg(short = 'H', long, default_value = "localhost")]
-    pub host: String,
+    #[arg(short = 'H', long)]
+    pub host: Option<String>,
 
     /// Scheduler port
-    #[arg(short, long, default_value_t = 39512)]
-    pub port: u16,
+    #[arg(short, long)]
+    pub port: Option<u16>,
 }
 
 #[derive(Parser)]
@@ -97,12 +97,12 @@ pub struct AddArgs {
     pub depends: Option<String>,
 
     /// Scheduler host
-    #[arg(short = 'H', long, default_value = "localhost")]
-    pub host: String,
+    #[arg(short = 'H', long)]
+    pub host: Option<String>,
 
     /// Scheduler port
-    #[arg(short, long, default_value_t = 39512)]
-    pub port: u16,
+    #[arg(short, long)]
+    pub port: Option<u16>,
 }
 
 #[derive(Parser)]
@@ -112,12 +112,12 @@ pub struct ListArgs {
     pub detail: bool,
 
     /// Scheduler host
-    #[arg(short = 'H', long, default_value = "localhost")]
-    pub host: String,
+    #[arg(short = 'H', long)]
+    pub host: Option<String>,
 
     /// Scheduler port
-    #[arg(short, long, default_value_t = 39512)]
-    pub port: u16,
+    #[arg(short, long)]
+    pub port: Option<u16>,
 }
 
 #[derive(Parser)]
@@ -126,12 +126,12 @@ pub struct ShowArgs {
     pub task_id: i64,
 
     /// Scheduler host
-    #[arg(short = 'H', long, default_value = "localhost")]
-    pub host: String,
+    #[arg(short = 'H', long)]
+    pub host: Option<String>,
 
     /// Scheduler port
-    #[arg(short, long, default_value_t = 39512)]
-    pub port: u16,
+    #[arg(short, long)]
+    pub port: Option<u16>,
 }
 
 #[derive(Parser)]
@@ -140,12 +140,12 @@ pub struct ResumeArgs {
     pub task_or_session_id: String,
 
     /// Scheduler host
-    #[arg(short = 'H', long, default_value = "localhost")]
-    pub host: String,
+    #[arg(short = 'H', long)]
+    pub host: Option<String>,
 
     /// Scheduler port
-    #[arg(short, long, default_value_t = 39512)]
-    pub port: u16,
+    #[arg(short, long)]
+    pub port: Option<u16>,
 
     /// Additional arguments to pass to Claude Code
     #[arg(last = true)]
@@ -158,12 +158,12 @@ pub struct DeleteArgs {
     pub task_id: i64,
 
     /// Scheduler host
-    #[arg(short = 'H', long, default_value = "localhost")]
-    pub host: String,
+    #[arg(short = 'H', long)]
+    pub host: Option<String>,
 
     /// Scheduler port
-    #[arg(short, long, default_value_t = 39512)]
-    pub port: u16,
+    #[arg(short, long)]
+    pub port: Option<u16>,
 }
 
 #[derive(Parser)]
@@ -175,12 +175,12 @@ pub struct RenameArgs {
     pub new_name: String,
 
     /// Scheduler host
-    #[arg(short = 'H', long, default_value = "localhost")]
-    pub host: String,
+    #[arg(short = 'H', long)]
+    pub host: Option<String>,
 
     /// Scheduler port
-    #[arg(short, long, default_value_t = 39512)]
-    pub port: u16,
+    #[arg(short, long)]
+    pub port: Option<u16>,
 }
 
 #[derive(Parser)]
@@ -192,10 +192,10 @@ pub struct EditArgs {
     pub prompt_file: Option<String>,
 
     /// Scheduler host
-    #[arg(short = 'H', long, default_value = "localhost")]
-    pub host: String,
+    #[arg(short = 'H', long)]
+    pub host: Option<String>,
 
     /// Scheduler port
-    #[arg(short, long, default_value_t = 39512)]
-    pub port: u16,
+    #[arg(short, long)]
+    pub port: Option<u16>,
 }

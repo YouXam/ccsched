@@ -46,6 +46,7 @@ impl Config {
         claude_path: Option<String>,
         env_file: Option<String>,
     ) -> Result<Self> {
+        // 1. Load .env file (lowest priority)
         if let Some(env_file) = env_file {
             dotenvy::from_filename(env_file).map_err(|e| {
                 CcschedError::Config(format!("Failed to load env file: {e}"))
@@ -54,22 +55,37 @@ impl Config {
             dotenvy::dotenv().ok();
         }
 
-        let mut config = Self::from_env()?;
+        // 2. Start with defaults
+        let database_url = env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "sqlite:./db.sqlite".to_string());
 
-        if let Some(host) = host {
-            config.host = host;
-        }
-        if let Some(port) = port {
-            config.port = port;
-        }
-        if let Some(claude_path) = claude_path {
-            config.claude_path = claude_path;
-        }
+        // 3. Environment variables override .env file values
+        let env_host = env::var("CCSCHED_HOST").ok();
+        let env_port = env::var("CCSCHED_PORT").ok();
+        let env_claude_path = env::var("CLAUDE_PATH").ok();
 
-        // Capture environment variables after loading env file
-        config.env_vars = env::vars().collect();
+        // 4. CLI arguments override environment variables (highest priority)
+        let final_host = host
+            .or(env_host)
+            .unwrap_or_else(|| "127.0.0.1".to_string());
 
-        Ok(config)
+        let final_port = port
+            .or_else(|| env_port.and_then(|p| p.parse().ok()))
+            .unwrap_or(39512);
+
+        let final_claude_path = claude_path
+            .or(env_claude_path)
+            .unwrap_or_else(|| "claude".to_string());
+
+        let env_vars = env::vars().collect();
+
+        Ok(Self {
+            database_url,
+            host: final_host,
+            port: final_port,
+            claude_path: final_claude_path,
+            env_vars,
+        })
     }
 
     pub fn bind_address(&self) -> String {

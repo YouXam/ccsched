@@ -41,7 +41,9 @@ pub async fn add_task(args: AddArgs) -> Result<()> {
     };
 
     let client = reqwest::Client::new();
-    let url = format!("http://{}:{}/submit", args.host, args.port);
+    let url = format!("http://{}:{}/submit", 
+                      args.host.as_ref().unwrap_or(&"localhost".to_string()), 
+                      args.port.unwrap_or(39512));
 
     let response = client
         .post(&url)
@@ -94,7 +96,9 @@ pub async fn submit_task(args: SubmitArgs) -> Result<()> {
     };
 
     let client = reqwest::Client::new();
-    let url = format!("http://{}:{}/submit", args.host, args.port);
+    let url = format!("http://{}:{}/submit", 
+                      args.host.as_ref().unwrap_or(&"localhost".to_string()), 
+                      args.port.unwrap_or(39512));
 
     let response = client
         .post(&url)
@@ -111,7 +115,9 @@ pub async fn submit_task(args: SubmitArgs) -> Result<()> {
 
 pub async fn list_tasks(args: ListArgs) -> Result<()> {
     let client = reqwest::Client::new();
-    let url = format!("http://{}:{}/list", args.host, args.port);
+    let url = format!("http://{}:{}/list", 
+                      args.host.as_ref().unwrap_or(&"localhost".to_string()), 
+                      args.port.unwrap_or(39512));
 
     let response = client.get(&url).send().await?.error_for_status()?;
     let task_list: TaskListResponse = response.json().await?;
@@ -183,7 +189,10 @@ pub async fn list_tasks(args: ListArgs) -> Result<()> {
 
 pub async fn show_task(args: ShowArgs) -> Result<()> {
     let client = reqwest::Client::new();
-    let url = format!("http://{}:{}/task/{}", args.host, args.port, args.task_id);
+    let url = format!("http://{}:{}/task/{}", 
+                      args.host.as_ref().unwrap_or(&"localhost".to_string()), 
+                      args.port.unwrap_or(39512), 
+                      args.task_id);
 
     let response = client.get(&url).send().await?.error_for_status()?;
     let task: TaskInfoWithPrompt = response.json().await?;
@@ -221,7 +230,7 @@ pub async fn show_task(args: ShowArgs) -> Result<()> {
 }
 
 pub async fn resume_task(args: ResumeArgs) -> Result<()> {
-    if !is_local_host(&args.host) {
+    if !is_local_host(&args.host.as_ref().unwrap_or(&"localhost".to_string())) {
         return Err(anyhow!("Resume command can only be used with local scheduler instances"));
     }
 
@@ -230,12 +239,18 @@ pub async fn resume_task(args: ResumeArgs) -> Result<()> {
     let task_info = if args.task_or_session_id.parse::<i64>().is_ok() {
         // It's a valid number, treat as task ID
         let task_id: i64 = args.task_or_session_id.parse().unwrap();
-        let url = format!("http://{}:{}/task/{}", args.host, args.port, task_id);
+        let url = format!("http://{}:{}/task/{}", 
+                          args.host.as_ref().unwrap_or(&"localhost".to_string()), 
+                          args.port.unwrap_or(39512), 
+                          task_id);
         let response = client.get(&url).send().await?.error_for_status()?;
         response.json::<TaskInfo>().await?
     } else {
         // Not a number, treat as session ID
-        let url = format!("http://{}:{}/task/session/{}", args.host, args.port, args.task_or_session_id);
+        let url = format!("http://{}:{}/task/session/{}", 
+                          args.host.as_ref().unwrap_or(&"localhost".to_string()), 
+                          args.port.unwrap_or(39512), 
+                          args.task_or_session_id);
         let response = client.get(&url).send().await?.error_for_status()?;
         response.json::<TaskInfo>().await?
     };
@@ -261,7 +276,10 @@ pub async fn resume_task(args: ResumeArgs) -> Result<()> {
 
 pub async fn delete_task(args: DeleteArgs) -> Result<()> {
     let client = reqwest::Client::new();
-    let url = format!("http://{}:{}/task/{}", args.host, args.port, args.task_id);
+    let url = format!("http://{}:{}/task/{}", 
+                      args.host.as_ref().unwrap_or(&"localhost".to_string()), 
+                      args.port.unwrap_or(39512), 
+                      args.task_id);
 
     let response = client.delete(&url).send().await?.error_for_status()?;
     
@@ -276,7 +294,10 @@ pub async fn delete_task(args: DeleteArgs) -> Result<()> {
 
 pub async fn rename_task(args: RenameArgs) -> Result<()> {
     let client = reqwest::Client::new();
-    let url = format!("http://{}:{}/task/{}/rename", args.host, args.port, args.task_id);
+    let url = format!("http://{}:{}/task/{}/rename", 
+                      args.host.as_ref().unwrap_or(&"localhost".to_string()), 
+                      args.port.unwrap_or(39512), 
+                      args.task_id);
 
     let request = serde_json::json!({
         "name": args.new_name
@@ -299,7 +320,10 @@ pub async fn rename_task(args: RenameArgs) -> Result<()> {
 
 pub async fn edit_task(args: EditArgs) -> Result<()> {
     let client = reqwest::Client::new();
-    let url = format!("http://{}:{}/task/{}", args.host, args.port, args.task_id);
+    let url = format!("http://{}:{}/task/{}", 
+                      args.host.as_ref().unwrap_or(&"localhost".to_string()), 
+                      args.port.unwrap_or(39512), 
+                      args.task_id);
     let response = client.get(&url).send().await?.error_for_status()?;
     let task: TaskInfoWithPrompt = response.json().await?;
     
@@ -338,7 +362,10 @@ pub async fn edit_task(args: EditArgs) -> Result<()> {
     }
 
     let client = reqwest::Client::new();
-    let url = format!("http://{}:{}/task/{}/edit", args.host, args.port, args.task_id);
+    let url = format!("http://{}:{}/task/{}/edit", 
+                      args.host.as_ref().unwrap_or(&"localhost".to_string()), 
+                      args.port.unwrap_or(39512), 
+                      args.task_id);
 
     let request = serde_json::json!({
         "prompt": prompt
