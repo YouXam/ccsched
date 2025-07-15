@@ -77,7 +77,7 @@ impl Worker {
         
         // Task is already marked as running by the scheduler
         
-        let task_log_path = format!("task_{task_id}.jsonl");
+        let task_log_path = format!("./logs/task_{task_id}.jsonl");
         // Remove logs directory creation since we're writing to current directory
 
         let initial_result = self.run_claude_initial(&task, &task_log_path, task_id).await?;
