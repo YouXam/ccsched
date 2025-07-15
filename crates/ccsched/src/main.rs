@@ -3,6 +3,7 @@ use ccsched::client::*;
 use ccsched::server::start_server;
 use ccsched_core::config::Config;
 use clap::Parser;
+use tracing::debug;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -21,6 +22,8 @@ async fn main() -> anyhow::Result<()> {
                 Some(args.claude_path),
                 args.env,
             )?;
+
+            debug!("Configuration: {:?}", config);
 
             start_server(config).await?;
         }
