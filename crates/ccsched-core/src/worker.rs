@@ -9,7 +9,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::fs::OpenOptions;
 use tokio::process::Command;
 use tokio::sync::{mpsc, watch};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 pub struct Worker {
     db: Database,
@@ -48,6 +48,7 @@ impl Worker {
                         
                         let task_id = task.id;
                         info!("Starting execution of task {}: {}", task_id, task.name);
+                        debug!("Task {} details: {:?}", task_id, task);
 
                         if let Err(e) = self.execute_task(task).await {
                             error!("Task {} failed: {}", task_id, e);
@@ -271,7 +272,7 @@ impl Worker {
         task_log_path: &str,
         task_id: i64,
     ) -> Result<ClaudeResult> {
-        self.run_claude_command(task, &task.prompt, None, task_log_path, task_id)
+        self.run_claude_command(task, &task.prompt, task.session_id.as_deref(), task_log_path, task_id)
             .await
     }
 
@@ -319,7 +320,19 @@ impl Worker {
         task_log_path: &str,
         task_id: i64,
     ) -> Result<ClaudeResult> {
-        let mut cmd = Command::new(&self.config.claude_path);
+        // Resolve claude_path to absolute path if it's relative
+        let claude_path = if std::path::Path::new(&self.config.claude_path).is_absolute() {
+            self.config.claude_path.clone()
+        } else {
+            // Resolve relative path based on current working directory
+            let current_dir = std::env::current_dir()
+                .map_err(|e| CcschedError::ClaudeExecution(format!("Failed to get current directory: {}", e)))?;
+            current_dir.join(&self.config.claude_path)
+                .to_string_lossy()
+                .to_string()
+        };
+        
+        let mut cmd = Command::new(&claude_path);
         cmd.args([
             "--output-format",
             "stream-json",

@@ -539,7 +539,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         
         let mut stmt = conn.prepare(
-            "SELECT id, name, prompt, cwd, status, session_id, submitted_at, finished_at, output, result, resume_at FROM tasks WHERE status = 'waiting' AND (resume_at IS NULL OR resume_at <= datetime('now', 'utc')) ORDER BY submitted_at ASC"
+            "SELECT id, name, prompt, cwd, status, session_id, submitted_at, finished_at, output, result, resume_at FROM tasks WHERE status = 'waiting' AND (resume_at IS NULL OR resume_at <= datetime('now')) ORDER BY submitted_at ASC"
         )?;
 
         let rows = stmt.query_map([], |row| {
