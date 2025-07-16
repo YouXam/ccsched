@@ -235,7 +235,8 @@ pub async fn resume_task(args: ResumeArgs) -> Result<()> {
     }
 
     let client = reqwest::Client::new();
-    let host = args.host.as_ref().unwrap_or(&"localhost".to_string());
+    let default_host = "localhost".to_string();
+    let host = args.host.as_ref().unwrap_or(&default_host);
     let port = args.port.unwrap_or(39512);
     
     // Get server configuration to obtain claude_path

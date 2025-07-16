@@ -55,6 +55,11 @@ impl Scheduler {
             }
         }
         
+        // Resume any waiting tasks that are ready on startup
+        if let Err(e) = self.resume_waiting_tasks().await {
+            error!("Error resuming waiting tasks on startup: {}", e);
+        }
+        
         let mut interval = time::interval(self.check_interval);
         let mut paused_until: Option<DateTime<Utc>> = None;
 
@@ -76,6 +81,10 @@ impl Scheduler {
                             }
                             if let Err(e) = self.resume_waiting_tasks().await {
                                 error!("Error resuming waiting tasks: {}", e);
+                            }
+                            // Immediately try to schedule resumed tasks
+                            if let Err(e) = self.schedule_ready_tasks().await {
+                                error!("Error scheduling resumed tasks: {}", e);
                             }
                         }
                     }
